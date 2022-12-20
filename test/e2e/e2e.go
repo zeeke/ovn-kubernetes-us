@@ -1776,7 +1776,8 @@ var _ = ginkgo.Describe("e2e ingress traffic validation", func() {
 			}
 		})
 	})
-	ginkgo.Context("Validating ExternalIP ingress traffic to manually added node IPs", func() {
+
+	ginkgo.Context("Validating ingress traffic to manually added node IPs", func() {
 		ginkgo.BeforeEach(func() {
 			endPoints = make([]*v1.Pod, 0)
 			nodesHostnames = sets.NewString()
@@ -1846,6 +1847,7 @@ var _ = ginkgo.Describe("e2e ingress traffic validation", func() {
 				}
 			}
 		})
+
 		// This test validates ingress traffic to externalservices after a new node Ip is added.
 		// It creates a service on both udp and tcp and assigns the new node IPs as
 		// external Addresses. Then, creates a backend pod on each node.
@@ -1888,6 +1890,38 @@ var _ = ginkgo.Describe("e2e ingress traffic validation", func() {
 						}
 					}
 					framework.ExpectEqual(valid, true, "Validation failed for external address", externalAddress)
+				}
+			}
+		})
+
+		// This test verifies a NodePort service is reachable on manually added IP addresses.
+		ginkgo.It("for NodePort services", func() {
+			serviceName := "nodeportservice"
+
+			ginkgo.By("Creating NodePort service")
+			svcSpec := nodePortServiceSpecFrom(serviceName, v1.IPFamilyPolicyPreferDualStack, endpointHTTPPort, endpointUDPPort, clusterHTTPPort, clusterUDPPort, endpointsSelector, v1.ServiceExternalTrafficPolicyTypeLocal)
+			svcSpec, err := f.ClientSet.CoreV1().Services(f.Namespace.Name).Create(context.Background(), svcSpec, metav1.CreateOptions{})
+			framework.ExpectNoError(err)
+
+			ginkgo.By("Waiting for the endpoints to pop up")
+			err = framework.WaitForServiceEndpointsNum(f.ClientSet, f.Namespace.Name, serviceName, len(endPoints), time.Second, wait.ForeverTestTimeout)
+			framework.ExpectNoError(err, "failed to validate endpoints for service %s in namespace: %s", serviceName, f.Namespace.Name)
+
+			tcpNodePort, udpNodePort := nodePortsFromService(svcSpec)
+
+			for _, protocol := range []string{"http", "udp"} {
+				toCurlPort := int32(tcpNodePort)
+				if protocol == "udp" {
+					toCurlPort = int32(udpNodePort)
+				}
+
+				for _, newAddress := range newNodeAddresses {
+					ginkgo.By("Hitting the service on " + newAddress + " via " + protocol)
+					gomega.Eventually(func() bool {
+						epHostname := pokeEndpoint("", clientContainerName, protocol, newAddress, toCurlPort, "hostname")
+						// Expect to receive a valid hostname
+						return nodesHostnames.Has(epHostname)
+					}, "10s", "1s").Should(gomega.BeTrue())
 				}
 			}
 		})

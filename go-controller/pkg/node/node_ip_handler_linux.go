@@ -4,6 +4,7 @@
 package node
 
 import (
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -154,11 +155,9 @@ func (c *addressManager) Run(stopChan <-chan struct{}, doneWg *sync.WaitGroup) {
 				}
 
 				if addrChanged || !c.doesNodeHostAddressesMatch() {
-					if err := util.SetNodeHostAddresses(c.nodeAnnotator, c.addresses); err != nil {
-						klog.Errorf("Failed to set node annotations: %v", err)
-						continue
-					}
-					if err := c.nodeAnnotator.Run(); err != nil {
+					klog.Infof("Changing addresses")
+					err := c.setAddressesOnNodeAnnotations()
+					if err != nil {
 						klog.Errorf("Failed to set node annotations: %v", err)
 					}
 					c.OnChanged()
@@ -266,10 +265,52 @@ func (c *addressManager) sync() {
 	addrChanged := c.assignAddresses(currAddresses)
 	if addrChanged || !c.doesNodeHostAddressesMatch() {
 		klog.Infof("Node address annotation being set to: %v addrChanged: %v", currAddresses, addrChanged)
-		if err := util.SetNodeHostAddresses(c.nodeAnnotator, c.addresses); err != nil {
-			klog.Errorf("Failed to set node annotations: %v", err)
-		} else if err := c.nodeAnnotator.Run(); err != nil {
+		err := c.setAddressesOnNodeAnnotations()
+		if err != nil {
 			klog.Errorf("Failed to set node annotations: %v", err)
 		}
 	}
+}
+
+func (c *addressManager) setAddressesOnNodeAnnotations() error {
+	err := util.SetNodeHostAddresses(c.nodeAnnotator, c.addresses)
+	if err != nil {
+		return fmt.Errorf("can't set host address annotation: %w", err)
+	}
+
+	node, err := c.watchFactory.GetNode(c.nodeName)
+	if err != nil {
+		return fmt.Errorf("can't get node: %w", err)
+	}
+	l3GatewayConfig, err := util.ParseNodeL3GatewayAnnotation(node)
+	if err != nil {
+		return fmt.Errorf("failed to parse l3 gateway annotation for node: %w", err)
+	}
+
+	l3GatewayConfig.IPAddresses = []*net.IPNet{}
+	for _, address := range c.addresses.List() {
+		ip := net.ParseIP(address)
+		if ip == nil {
+			return fmt.Errorf("bad IP address: %s", address)
+		}
+		m := net.CIDRMask(net.IPv6len, net.IPv6len)
+		if ip.To4() != nil {
+			m = net.CIDRMask(net.IPv4len, net.IPv4len)
+		}
+
+		ipAndMask := &net.IPNet{IP: ip, Mask: m}
+		l3GatewayConfig.IPAddresses = append(l3GatewayConfig.IPAddresses, ipAndMask)
+	}
+
+	err = util.SetL3GatewayConfig(c.nodeAnnotator, l3GatewayConfig)
+	if err != nil {
+		return fmt.Errorf("can't set host address annotation: %w", err)
+	}
+
+	err = c.nodeAnnotator.Run()
+	if err != nil {
+		return fmt.Errorf("can't run annotator on node: %w", err)
+	}
+
+	return nil
 }
