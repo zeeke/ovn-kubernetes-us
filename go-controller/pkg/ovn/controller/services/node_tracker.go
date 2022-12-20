@@ -12,6 +12,7 @@ import (
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/util"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
@@ -93,10 +94,16 @@ func newNodeTracker(nodeInformer coreinformers.NodeInformer) *nodeTracker {
 				return
 			}
 
-			// updateNode needs to be called only when hostSubnet annotation has changed or
-			// if L3Gateway annotation's ip addresses have changed or the name of the node (very rare)
-			// has changed. No need to trigger update for any other field change.
-			if util.NodeSubnetAnnotationChanged(oldObj, newObj) || util.NodeL3GatewayAnnotationChanged(oldObj, newObj) || oldObj.Name != newObj.Name {
+			// updateNode needs to be called in the following cases:
+			// - hostSubnet annotation has changed
+			// - L3Gateway annotation's ip addresses have changed
+			// - the name of the node (very rare) has changed
+			// - the `host-addresses` annotation changed
+			// . No need to trigger update for any other field change.
+			if util.NodeSubnetAnnotationChanged(oldObj, newObj) ||
+				util.NodeL3GatewayAnnotationChanged(oldObj, newObj) ||
+				oldObj.Name != newObj.Name ||
+				util.NodeHostAddressesAnnotationChanged(oldObj, newObj) {
 				nt.updateNode(newObj)
 			}
 		},
@@ -184,7 +191,7 @@ func (nt *nodeTracker) updateNode(node *v1.Node) {
 
 	switchName := node.Name
 	grName := ""
-	ips := []string{}
+	ips := sets.NewString()
 
 	// if the node has a gateway config, it will soon have a gateway router
 	// so, set the router name
@@ -195,16 +202,23 @@ func (nt *nodeTracker) updateNode(node *v1.Node) {
 		grName = util.GetGatewayRouterFromNode(node.Name)
 		if gwConf.NodePortEnable {
 			for _, ip := range gwConf.IPAddresses {
-				ips = append(ips, ip.IP.String())
+				ips.Insert(ip.IP.String())
 			}
 		}
+	}
+
+	hostAddresses, err := util.ParseNodeHostAddresses(node)
+	if err != nil {
+		klog.Warningf("Failed to get node host addresses for [%s]: %s", node.Name, err.Error())
+	} else {
+		ips.Insert(hostAddresses.List()...)
 	}
 
 	nt.updateNodeInfo(
 		node.Name,
 		switchName,
 		grName,
-		ips,
+		ips.List(),
 		hsn,
 	)
 }

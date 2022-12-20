@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	kapi "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/config"
@@ -527,6 +528,10 @@ func parseNodeEgressIPConfig(egressIPConfig *nodeEgressIPConfiguration) (*Parsed
 // GetNodeEgressLabel returns label annotation needed for marking nodes as egress assignable
 func GetNodeEgressLabel() string {
 	return ovnNodeEgressLabel
+}
+
+func NodeHostAddressesAnnotationChanged(oldNode, newNode *v1.Node) bool {
+	return oldNode.Annotations[ovnNodeHostAddresses] != newNode.Annotations[ovnNodeHostAddresses]
 }
 
 func SetNodeHostAddresses(nodeAnnotator kube.Annotator, addresses sets.String) error {
