@@ -108,8 +108,8 @@ var protos = []v1.Protocol{
 // - services with InternalTrafficPolicy=Local
 //
 // Template LBs will be created for
-// - services with NodePort set but *without* ExternalTrafficPolicy=Local or
-//   affinity timeout set.
+//   - services with NodePort set but *without* ExternalTrafficPolicy=Local or
+//     affinity timeout set.
 func buildServiceLBConfigs(service *v1.Service, endpointSlices []*discovery.EndpointSlice, useLBGroup, useTemplates bool) (perNodeConfigs, templateConfigs, clusterConfigs []lbConfig) {
 	needsAffinityTimeout := hasSessionAffinityTimeOut(service)
 
@@ -561,6 +561,11 @@ func buildPerNodeLBs(service *v1.Service, configs []lbConfig, nodes []nodeInfo) 
 
 				routerV4targetips, _ := config.makeNodeRouterTargetIPs(&node, config.eps.V4IPs, types.V4HostMasqueradeIP)
 				routerV6targetips, _ := config.makeNodeRouterTargetIPs(&node, config.eps.V6IPs, types.V6HostMasqueradeIP)
+
+				// any targets local to the node need to have a special
+				// harpin IP added, but only for the router LB
+				routerV4targetips, _ = util.UpdateIPsSlice(routerV4targetips, node.l3gatewayAddressesStr(), []string{types.V4HostMasqueradeIP})
+				routerV6targetips, _ = util.UpdateIPsSlice(routerV6targetips, node.l3gatewayAddressesStr(), []string{types.V6HostMasqueradeIP})
 
 				routerV4targets := joinHostsPort(routerV4targetips, config.eps.Port)
 				routerV6targets := joinHostsPort(routerV6targetips, config.eps.Port)

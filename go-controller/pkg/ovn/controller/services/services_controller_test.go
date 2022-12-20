@@ -679,11 +679,12 @@ func endpoint(ip string, port int32) string {
 
 func nodeConfig(nodeName string, nodeIP string) *nodeInfo {
 	return &nodeInfo{
-		name:              nodeName,
-		nodeIPs:           []net.IP{net.ParseIP(nodeIP)},
-		gatewayRouterName: nodeGWRouterName(nodeName),
-		switchName:        nodeSwitchName(nodeName),
-		chassisID:         nodeName,
+		name:               nodeName,
+		l3gatewayAddresses: []net.IP{net.ParseIP(nodeIP)},
+		hostAddresses:      []net.IP{net.ParseIP(nodeIP)},
+		gatewayRouterName:  nodeGWRouterName(nodeName),
+		switchName:         nodeSwitchName(nodeName),
+		chassisID:          nodeName,
 	}
 }
 
