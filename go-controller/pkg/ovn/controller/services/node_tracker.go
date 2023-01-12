@@ -36,7 +36,9 @@ type nodeInfo struct {
 	// the node's Name
 	name string
 	// The list of physical IPs the node has, as reported by the gatewayconf annotation
-	nodeIPs []string
+	l3gatewayAddresses []string
+
+	hostAddresses []string
 	// The pod network subnet(s)
 	podSubnets []net.IPNet
 	// the name of the node's GatewayRouter, or "" of non-existent
@@ -49,7 +51,7 @@ type nodeInfo struct {
 // includes node IPs, still as a mask-1 net
 func (ni *nodeInfo) nodeSubnets() []net.IPNet {
 	out := append([]net.IPNet{}, ni.podSubnets...)
-	for _, ipStr := range ni.nodeIPs {
+	for _, ipStr := range ni.hostAddresses {
 		ip := net.ParseIP(ipStr)
 		if ipv4 := ip.To4(); ipv4 != nil {
 			out = append(out, net.IPNet{
@@ -131,13 +133,14 @@ func newNodeTracker(nodeInformer coreinformers.NodeInformer) *nodeTracker {
 
 // updateNodeInfo updates the node info cache, and syncs all services
 // if it changed.
-func (nt *nodeTracker) updateNodeInfo(nodeName, switchName, routerName string, nodeIPs []string, podSubnets []*net.IPNet) {
+func (nt *nodeTracker) updateNodeInfo(nodeName, switchName, routerName string, l3gatewayAddresses, hostAddresses []string, podSubnets []*net.IPNet) {
 	ni := nodeInfo{
-		name:              nodeName,
-		nodeIPs:           nodeIPs,
-		podSubnets:        make([]net.IPNet, 0, len(podSubnets)),
-		gatewayRouterName: routerName,
-		switchName:        switchName,
+		name:               nodeName,
+		l3gatewayAddresses: l3gatewayAddresses,
+		hostAddresses:      hostAddresses,
+		podSubnets:         make([]net.IPNet, 0, len(podSubnets)),
+		gatewayRouterName:  routerName,
+		switchName:         switchName,
 	}
 	for i := range podSubnets {
 		ni.podSubnets = append(ni.podSubnets, *podSubnets[i]) // de-pointer
@@ -191,7 +194,7 @@ func (nt *nodeTracker) updateNode(node *v1.Node) {
 
 	switchName := node.Name
 	grName := ""
-	ips := sets.NewString()
+	l3gatewayAddresses := sets.NewString()
 
 	// if the node has a gateway config, it will soon have a gateway router
 	// so, set the router name
@@ -202,7 +205,7 @@ func (nt *nodeTracker) updateNode(node *v1.Node) {
 		grName = util.GetGatewayRouterFromNode(node.Name)
 		if gwConf.NodePortEnable {
 			for _, ip := range gwConf.IPAddresses {
-				ips.Insert(ip.IP.String())
+				l3gatewayAddresses.Insert(ip.IP.String())
 			}
 		}
 	}
@@ -210,15 +213,15 @@ func (nt *nodeTracker) updateNode(node *v1.Node) {
 	hostAddresses, err := util.ParseNodeHostAddresses(node)
 	if err != nil {
 		klog.Warningf("Failed to get node host addresses for [%s]: %s", node.Name, err.Error())
-	} else {
-		ips.Insert(hostAddresses.List()...)
+		hostAddresses = sets.NewString()
 	}
 
 	nt.updateNodeInfo(
 		node.Name,
 		switchName,
 		grName,
-		ips.List(),
+		l3gatewayAddresses.List(),
+		hostAddresses.List(),
 		hsn,
 	)
 }
