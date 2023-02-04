@@ -30,6 +30,8 @@ type unidlingController struct {
 	// Map of load balancers to service namespace
 	serviceVIPToName     map[ServiceVIPKey]types.NamespacedName
 	serviceVIPToNameLock sync.Mutex
+	idledServicesSet     map[types.NamespacedName]struct{}
+	idledServicesSetLock sync.Mutex
 	sbClient             libovsdbclient.Client
 }
 
@@ -39,6 +41,7 @@ func NewController(recorder record.EventRecorder, serviceInformer cache.SharedIn
 		eventQueue:       make(chan sbdb.ControllerEvent),
 		eventRecorder:    recorder,
 		serviceVIPToName: map[ServiceVIPKey]types.NamespacedName{},
+		idledServicesSet: map[types.NamespacedName]struct{}{},
 		sbClient:         sbClient,
 	}
 
@@ -97,6 +100,10 @@ func (uc *unidlingController) onServiceAdd(obj interface{}) {
 			}
 		}
 	}
+
+	if HasIdleAt(svc) {
+		uc.addServiceNameToIdleSet(svc.Namespace, svc.Name)
+	}
 }
 
 func (uc *unidlingController) onServiceDelete(obj interface{}) {
@@ -122,6 +129,8 @@ func (uc *unidlingController) onServiceDelete(obj interface{}) {
 			}
 		}
 	}
+
+	uc.removeServiceNameFromIdleSet(svc.Namespace, svc.Name)
 }
 
 // ServiceVIPKey is used for looking up service namespace information for a
@@ -155,6 +164,25 @@ func (uc *unidlingController) DeleteServiceVIPToName(vip string, protocol kapi.P
 	delete(uc.serviceVIPToName, ServiceVIPKey{vip, protocol})
 }
 
+func (uc *unidlingController) addServiceNameToIdleSet(namespace, name string) {
+	uc.idledServicesSetLock.Lock()
+	defer uc.idledServicesSetLock.Unlock()
+	uc.idledServicesSet[types.NamespacedName{Namespace: namespace, Name: name}] = struct{}{}
+}
+
+func (uc *unidlingController) removeServiceNameFromIdleSet(namespace, name string) {
+	uc.idledServicesSetLock.Lock()
+	defer uc.idledServicesSetLock.Unlock()
+	delete(uc.idledServicesSet, types.NamespacedName{Namespace: namespace, Name: name})
+}
+
+func (uc *unidlingController) isServiceNameContainedInIdleSet(namespace, name string) bool {
+	uc.idledServicesSetLock.Lock()
+	defer uc.idledServicesSetLock.Unlock()
+	_, ok := uc.idledServicesSet[types.NamespacedName{Namespace: namespace, Name: name}]
+	return ok
+}
+
 func (uc *unidlingController) Run(stopCh <-chan struct{}) {
 	for {
 		select {
@@ -185,6 +213,7 @@ func (uc *unidlingController) handleLbEmptyBackendsEvent(event sbdb.ControllerEv
 	if err != nil {
 		return err
 	}
+
 	vip, ok := event.EventInfo["vip"]
 	if !ok {
 		return err
@@ -198,14 +227,26 @@ func (uc *unidlingController) handleLbEmptyBackendsEvent(event sbdb.ControllerEv
 	} else {
 		protocol = kapi.ProtocolTCP
 	}
-	if serviceName, ok := uc.GetServiceVIPToName(vip, protocol); ok {
-		serviceRef := kapi.ObjectReference{
-			Kind:      "Service",
-			Namespace: serviceName.Namespace,
-			Name:      serviceName.Name,
-		}
-		klog.V(5).Infof("Sending a NeedPods event for service %s in namespace %s.", serviceName.Name, serviceName.Namespace)
-		uc.eventRecorder.Eventf(&serviceRef, kapi.EventTypeNormal, "NeedPods", "The service %s needs pods", serviceName.Name)
+
+	serviceName, ok := uc.GetServiceVIPToName(vip, protocol)
+
+	if !ok {
+		return fmt.Errorf("can't find service for vip %s:%s", protocol, vip)
 	}
+
+	if !uc.isServiceNameContainedInIdleSet(serviceName.Namespace, serviceName.Name) {
+		// Service has already been unidled, avoid raising NeedPods events
+		klog.V(5).Infof("Not sending NeedPods event for service %s in namespace %s, as it is not idled.", serviceName.Name, serviceName.Namespace)
+		return nil
+	}
+
+	serviceRef := kapi.ObjectReference{
+		Kind:      "Service",
+		Namespace: serviceName.Namespace,
+		Name:      serviceName.Name,
+	}
+	klog.V(5).Infof("Sending a NeedPods event for service %s in namespace %s.", serviceName.Name, serviceName.Namespace)
+	uc.eventRecorder.Eventf(&serviceRef, kapi.EventTypeNormal, "NeedPods", "The service %s needs pods", serviceName.Name)
+
 	return nil
 }
