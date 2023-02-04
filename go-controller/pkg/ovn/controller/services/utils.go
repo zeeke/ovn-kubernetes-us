@@ -123,19 +123,3 @@ func IsHostEndpoint(endpointIP string) bool {
 	}
 	return true
 }
-
-const OvnServiceIdledSuffix = "idled-at"
-
-// When idling or empty LB events are enabled, we want to ensure we receive these packets and not reject them.
-func svcNeedsIdling(annotations map[string]string) bool {
-	if !globalconfig.Kubernetes.OVNEmptyLbEvents {
-		return false
-	}
-
-	for annotationKey := range annotations {
-		if strings.HasSuffix(annotationKey, OvnServiceIdledSuffix) {
-			return true
-		}
-	}
-	return false
-}

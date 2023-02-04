@@ -3,12 +3,16 @@ package unidling
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
+	"time"
 
 	libovsdbcache "github.com/ovn-org/libovsdb/cache"
 	libovsdbclient "github.com/ovn-org/libovsdb/client"
 	"github.com/ovn-org/libovsdb/model"
 	"github.com/ovn-org/libovsdb/ovsdb"
+	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/metrics"
+	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/ovn/controller/services"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/sbdb"
 	ovntypes "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/types"
 
@@ -18,7 +22,18 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
+)
+
+type Status string
+
+const (
+	StatusAnnotation    = "k8s.ovn.org/idle-status"
+	StatusIdle          = "Idle"
+	StatusGracePeriod   = "GracePeriod"
+	StatusNotIdle       = "NotIdle"
+	GracePeriodDuration = 30 * time.Second
 )
 
 // unidlingController checks periodically the OVN events db
@@ -31,6 +46,7 @@ type unidlingController struct {
 	serviceVIPToName     map[ServiceVIPKey]types.NamespacedName
 	serviceVIPToNameLock sync.Mutex
 	sbClient             libovsdbclient.Client
+	gracePeriodQueue     workqueue.DelayingInterface
 }
 
 // NewController creates a new unidling controller
@@ -40,6 +56,7 @@ func NewController(recorder record.EventRecorder, serviceInformer cache.SharedIn
 		eventRecorder:    recorder,
 		serviceVIPToName: map[ServiceVIPKey]types.NamespacedName{},
 		sbClient:         sbClient,
+		gracePeriodQueue: workqueue.NewDelayingQueue(),
 	}
 
 	klog.Info("Registering OVN SB ControllerEvent handler")
@@ -97,6 +114,74 @@ func (uc *unidlingController) onServiceAdd(obj interface{}) {
 			}
 		}
 	}
+
+	uc.alignIdleStatusAnnotation(svc)
+}
+
+func (uc *unidlingController) alignIdleStatusAnnotation(svc *kapi.Service) error {
+	hasIdledAtAnnotation := false
+	for annotationKey := range svc.Annotations {
+		if strings.HasSuffix(annotationKey, services.OvnServiceIdledSuffix) {
+			hasIdledAtAnnotation = true
+			break
+		}
+	}
+
+	statusAnnotation, statusAnnotationPresent := svc.Annotations[StatusAnnotation]
+
+	if !statusAnnotationPresent && !hasIdledAtAnnotation {
+		// Service is not idled
+		return nil
+	}
+
+	if !statusAnnotationPresent && hasIdledAtAnnotation {
+		svc.Annotations[StatusAnnotation] = StatusIdle
+		// TODO - Set annotation
+		return nil
+	}
+
+	if statusAnnotationPresent && !hasIdledAtAnnotation {
+		switch statusAnnotation {
+		case StatusIdle:
+		case StatusNotIdle:
+		case StatusGracePeriod:
+		}
+	}
+
+	switch statusAnnotation {
+	case StatusIdle:
+		if hasIdledAtAnnotation {
+			return nil
+		}
+
+		// Service has been unidled, put it in the grace period
+		svc.Annotations[StatusAnnotation] = StatusGracePeriod
+		key, err := cache.MetaNamespaceKeyFunc(svc)
+		if err != nil {
+			return fmt.Errorf("couldn't get key for service %+v: %v", svc, err)
+		}
+		uc.gracePeriodQueue.AddAfter(key, GracePeriodDuration)
+
+	case StatusNotIdle:
+		if !hasIdledAtAnnotation {
+			return nil
+		}
+
+		// Service has been idled
+		svc.Annotations[StatusAnnotation] = StatusIdle
+
+	case StatusGracePeriod:
+		if !hasIdledAtAnnotation {
+			return nil
+		}
+
+		// Service has been idled during the grace period
+		svc.Annotations[StatusAnnotation] = StatusIdle
+	}
+
+	// TODO - Set annotation
+
+	return nil
 }
 
 func (uc *unidlingController) onServiceDelete(obj interface{}) {
@@ -162,6 +247,10 @@ func (uc *unidlingController) Run(stopCh <-chan struct{}) {
 			if err := uc.handleLbEmptyBackendsEvent(event); err != nil {
 				klog.Error(err)
 			}
+		case event := <-uc.gracePeriodQueue:
+			if err := uc.handleGracePeriodEndEvent(event); err != nil {
+				klog.Error(err)
+			}
 		case <-stopCh:
 			return
 		}
@@ -208,4 +297,20 @@ func (uc *unidlingController) handleLbEmptyBackendsEvent(event sbdb.ControllerEv
 		uc.eventRecorder.Eventf(&serviceRef, kapi.EventTypeNormal, "NeedPods", "The service %s needs pods", serviceName.Name)
 	}
 	return nil
+}
+
+func (uc *unidlingController) handleGracePeriodEndEvent(key interface{}) error {
+	namespace, name, err := cache.SplitMetaNamespaceKey(key.(string))
+	if err != nil {
+		return err
+	}
+	klog.Infof("Unidling grace period finished for service %s/%s", namespace, name)
+
+	defer func() {
+		klog.V(4).Infof("Finished syncing service %s on namespace %s : %v", name, namespace, time.Since(startTime))
+		metrics.MetricSyncServiceLatency.Observe(time.Since(startTime).Seconds())
+	}()
+
+	// Get current Service from the cache
+	service, err := uc.serviceLister.Services(namespace).Get(name)
 }

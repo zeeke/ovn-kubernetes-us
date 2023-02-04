@@ -19,8 +19,11 @@ type LB struct {
 }
 
 type LBOpts struct {
-	// if true, then enable unidling. Otherwise, generate reject
-	Unidling bool
+	// if the service should send back tcp REJECT in case of no endpoints
+	Reject bool
+
+	// if the service should raise empty_lb events
+	EmptyLBEvents bool
 
 	// If greater than 0, then enable per-client-IP affinity.
 	AffinityTimeOut int32
