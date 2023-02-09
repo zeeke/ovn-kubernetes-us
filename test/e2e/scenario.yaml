@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged
+    security.openshift.io/scc.podSecurityLabelSync: "false"
+  name: ocpbugsm-44873
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: client-pod
+  namespace: ocpbugsm-44873
+spec:
+  containers:
+  - command:
+    - bash
+    - -c
+    - "sleep inf"
+    image: quay.io/sfhassan/basictools:latest
+    name: sleep-container
+    resources: { limits: {memory: "128Mi", cpu: "500m"} }
+    securityContext:
+      privileged: true
+      capabilities:
+        add: ["NET_ADMIN", "SYS_TIME"]
+---
+#apiVersion: v1
+#kind: ReplicationController
+#metadata:
+#  name: http-rc
+#  namespace: ocpbugsm-44873
+#spec:
+#  replicas: 2
+#  selector:    
+#    name: http-app
+#  template:    
+#    metadata:
+#      labels:  
+#        name: http-app 
+#    spec:
+#      containers:
+#      - image: quay.io/openshift-kni/cnf-tests:4.11
+#        name: c1
+#        command:
+#          - python3
+#          - -m
+#          - http.server
+#        ports:
+#        - containerPort: 8000
+#          protocol: TCP
+#      restartPolicy: Always
+#---
+apiVersion: v1
+kind: Service
+metadata:
+  name: http-service
+  namespace: ocpbugsm-44873
+spec:
+  selector:                  
+    name: http-app 
+  ports:
+  - nodePort: 0
+    port: 8000
+    protocol: TCP
+    targetPort: 8000

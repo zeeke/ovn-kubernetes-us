@@ -1,0 +1,28 @@
+
+k exec -it -n ovn-kubernetes deploy/ovnkube-master -c ovn-northd -- bash
+
+ovn-nbctl --if-exists destroy Load_Balancer $uuid
+uuid=`ovn-nbctl create Load_Balancer name=lb0`
+
+ovn-nbctl add Load_Balancer $uuid vips "\"10.96.137.236:8000\"=\"\""
+ovn-nbctl add Load_Balancer $uuid options neighbor_responder=none event=false reject=true "hairpin_snat_ip=\"169.254.169.5 fd69::5\"" skip_snat=false
+ovn-nbctl add Load_Balancer $uuid external_ids '"k8s.ovn.org/owner"="foo/bar"'
+ovn-nbctl add Load_Balancer $uuid protocol tcp
+group_uuid=`ovn-nbctl --columns=_uuid find Load_Balancer_Group name=clusterLBGroup | sed "s/.*: //"`
+ovn-nbctl add Load_Balancer_Group $group_uuid load_balancer $uuid
+
+
+
+ovn-nbctl set Load_Balancer $uuid options:event=false
+
+
+ovn-sbctl destroy Controller_Event ` ovn-sbctl list Controller_Event | grep _uuid | sed "s/.*: //"`
+
+
+switch_uuid=`ovn-nbctl --columns=_uuid find Logical_Switch name=ovn-control-plane | sed "s/.*: //"`
+group_uuid=`ovn-nbctl --columns=_uuid find Load_Balancer_Group name=clusterLBGroup | sed "s/.*: //"`
+ovn-nbctl add Logical_Switch $switch_uuid load_balancer $uuid
+
+ovn-nbctl find Load_Balancer name=lb0
+ovn-sbctl lflow-list
+ovn-sbctl list Controller_Event

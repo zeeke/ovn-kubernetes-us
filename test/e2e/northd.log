@@ -1,0 +1,82 @@
+================== ovnkube.sh --- version: 3 ================
+ ==================== command: run-ovn-northd
+ =================== hostname: ovn-control-plane
+ =================== daemonset version 3
+ =================== Image built from ovn-kubernetes ref: refs/heads/unidled-at-annotation  commit: bef3bab27434fe63e5b9d6d59bbbe6eeb5b3f78d
+=============== run-ovn-northd (wait for ready_to_start_node)
+ovn_nbdb=tcp://172.21.0.2:6641
+ovn_sbdb=tcp://172.21.0.2:6642
+=============== run_ovn_northd ========== MASTER ONLY
+ovn_nbdb tcp://172.21.0.2:6641   ovn_sbdb tcp://172.21.0.2:6642
+ovn_northd_opts=
+ovn_loglevel_northd=-vconsole:debug -vfile:debug
+2023-02-08T11:18:57Z|00001|vlog|INFO|opened log file /var/log/ovn/ovn-northd.log
+Starting ovn-northd.
+run as: /usr/share/ovn/scripts/ovn-ctl start_northd --no-monitor --ovn-manage-ovsdb=no --ovn-northd-nb-db=tcp:172.21.0.2:6641 --ovn-northd-sb-db=tcp:172.21.0.2:6642 --ovn-northd-log=-vconsole:debug -vfile:debug
+=============== run_ovn_northd ========== RUNNING
+2023-02-08T11:18:57.934Z|00001|vlog|INFO|opened log file /var/log/ovn/ovn-northd.log
+2023-02-08T11:18:57.935Z|00002|ovn_northd|INFO|OVN internal version is : [22.12.0-20.27.0-70.6]
+2023-02-08T11:18:57.935Z|00003|reconnect|INFO|tcp:172.21.0.2:6641: connecting...
+2023-02-08T11:18:57.935Z|00004|reconnect|INFO|tcp:172.21.0.2:6641: connected
+2023-02-08T11:18:57.935Z|00005|ovn_northd|INFO|OVN NB IDL reconnected, force recompute.
+2023-02-08T11:18:57.935Z|00006|reconnect|INFO|tcp:172.21.0.2:6642: connecting...
+2023-02-08T11:18:57.935Z|00007|reconnect|INFO|tcp:172.21.0.2:6642: connected
+2023-02-08T11:18:57.935Z|00008|ovn_northd|INFO|OVN SB IDL reconnected, force recompute.
+2023-02-08T11:18:57.935Z|00009|ovn_northd|INFO|ovn-northd lock acquired. This ovn-northd instance is now active.
+2023-02-08T11:18:57.949Z|00010|debug|DBG|Debug drop sampling: disabled
+tail: inotify cannot be used, reverting to polling: Too many open files
+2023-02-08T11:18:59.572Z|00011|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:18:59.575Z|00012|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:18:59.585Z|00013|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:18:59.593Z|00014|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:18:59.594Z|00015|ipam|WARN|e5f296da-c461-4131-9f7e-7b8d2bba93f9: Duplicate IP set: 10.244.2.2
+2023-02-08T11:18:59.595Z|00016|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:18:59.598Z|00017|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:18:59.602Z|00018|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:18:59.610Z|00019|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:18:59.625Z|00020|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:18:59.628Z|00021|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:19:01.341Z|00022|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:19:01.541Z|00023|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:19:11.350Z|00024|memory|INFO|6852 kB peak resident set size after 13.4 seconds
+2023-02-08T11:19:29.143Z|00025|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:19:29.151Z|00026|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:19:59.143Z|00027|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:19:59.147Z|00028|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:29.141Z|00029|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:29.143Z|00030|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:37.654Z|00031|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:37.658Z|00032|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:37.671Z|00033|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:37.679Z|00034|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:38.094Z|00035|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:38.098Z|00036|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:38.100Z|00037|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:39.681Z|00038|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:39.688Z|00039|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:39.696Z|00040|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:39.708Z|00041|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:39.854Z|00042|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:39.856Z|00043|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:40.892Z|00044|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:40.894Z|00045|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:43.971Z|00046|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:43.973Z|00047|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:44.990Z|00048|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:44.993Z|00049|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:49.150Z|00050|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:49.153Z|00051|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:50.174Z|00052|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:50.183Z|00053|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:58.534Z|00054|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:58.539Z|00055|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:58.633Z|00056|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:58.644Z|00057|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:59.143Z|00058|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:20:59.153Z|00059|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:21:29.143Z|00060|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:21:29.151Z|00061|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:21:59.143Z|00062|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:21:59.152Z|00063|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:22:29.143Z|00064|debug|DBG|Debug drop sampling: disabled
+2023-02-08T11:22:29.151Z|00065|debug|DBG|Debug drop sampling: disabled
