@@ -1,15 +1,93 @@
 
 k exec -it -n ovn-kubernetes deploy/ovnkube-master -c ovn-northd -- bash
 
+# ---------------------------------------------------------
+
+ovn-sbctl --all destroy Controller_Event
+ovn-nbctl --if-exists destroy Load_Balancer $uuid
+
+uuid=`ovn-nbctl create Load_Balancer name=lb0`
+ovn-nbctl add Load_Balancer $uuid vips "\"10.96.137.236:8000\"=\"\""
+ovn-nbctl add Load_Balancer $uuid options event=false reject=true 
+ovn-nbctl add Load_Balancer $uuid protocol tcp
+group_uuid=`ovn-nbctl --columns=_uuid find Load_Balancer_Group name=clusterLBGroup | sed "s/.*: //"`
+ovn-nbctl add Load_Balancer_Group $group_uuid load_balancer $uuid
+
+
+[root@client-pod /]# curl 10.96.137.236:8000
+curl: (7) Failed to connect to 10.96.137.236 port 8000: Connection refused
+
+[root@ovn-control-plane ~]#  ovn-sbctl list Controller_Event
+<no event>
+
+
+
+# ---------------------------------------------------------
+
+ovn-sbctl --all destroy Controller_Event
+ovn-nbctl --if-exists destroy Load_Balancer $uuid
+
+uuid=`ovn-nbctl create Load_Balancer name=lb0`
+ovn-nbctl add Load_Balancer $uuid vips "\"10.96.137.236:8000\"=\"\""
+ovn-nbctl add Load_Balancer $uuid options event=true reject=false
+ovn-nbctl add Load_Balancer $uuid protocol tcp
+group_uuid=`ovn-nbctl --columns=_uuid find Load_Balancer_Group name=clusterLBGroup | sed "s/.*: //"`
+ovn-nbctl add Load_Balancer_Group $group_uuid load_balancer $uuid
+
+[root@client-pod /]# curl -m 3  10.96.137.236:8000
+curl: (28) Connection timed out after 3001 milliseconds
+
+
+[root@ovn-control-plane ~]#  ovn-sbctl list Controller_Event
+_uuid               : 5f98c26d-2c8e-42e3-b5f2-8bf7a9d521d0
+chassis             : 57e8bff2-fcca-4054-a26d-081329682a7e
+event_info          : {load_balancer="d7761b6c-b777-4168-9ac1-2c1a864c24f4", protocol=tcp, vip="10.96.137.236:8000"}
+event_type          : empty_lb_backends
+seq_num             : 2
+
+
+[root@ovn-control-plane ~]# ovn-nbctl set Load_Balancer $uuid options:event=false
+[root@ovn-control-plane ~]# ovn-nbctl find Load_Balancer name=lb0
+_uuid               : d7761b6c-b777-4168-9ac1-2c1a864c24f4
+external_ids        : {}
+health_check        : []
+ip_port_mappings    : {}
+name                : lb0
+options             : {event="false", reject="false"}
+protocol            : tcp
+selection_fields    : []
+vips                : {"10.96.137.236:8000"=""}
+
+# Clears any previous event
+[root@ovn-control-plane ~]# ovn-sbctl --all destroy Controller_Event
+
+
+[root@client-pod /]# curl -m 3  10.96.137.236:8000
+curl: (28) Connection timed out after 3001 milliseconds
+
+[root@ovn-control-plane ~]# ovn-sbctl list Controller_Event
+_uuid               : b4a02803-a13c-4188-b0ca-9b5c11b7f3fb
+chassis             : 57e8bff2-fcca-4054-a26d-081329682a7e
+event_info          : {load_balancer="d7761b6c-b777-4168-9ac1-2c1a864c24f4", protocol=tcp, vip="10.96.137.236:8000"}
+event_type          : empty_lb_backends
+seq_num             : 3
+
+
+
+# ---------------------------------------------------------
+
+ovn-sbctl --all destroy Controller_Event
 ovn-nbctl --if-exists destroy Load_Balancer $uuid
 uuid=`ovn-nbctl create Load_Balancer name=lb0`
 
 ovn-nbctl add Load_Balancer $uuid vips "\"10.96.137.236:8000\"=\"\""
-ovn-nbctl add Load_Balancer $uuid options neighbor_responder=none event=false reject=true "hairpin_snat_ip=\"169.254.169.5 fd69::5\"" skip_snat=false
-ovn-nbctl add Load_Balancer $uuid external_ids '"k8s.ovn.org/owner"="foo/bar"'
+ovn-nbctl add Load_Balancer $uuid options event=false reject=false
 ovn-nbctl add Load_Balancer $uuid protocol tcp
 group_uuid=`ovn-nbctl --columns=_uuid find Load_Balancer_Group name=clusterLBGroup | sed "s/.*: //"`
 ovn-nbctl add Load_Balancer_Group $group_uuid load_balancer $uuid
+
+[root@client-pod /]# curl -m 3  10.96.137.236:8000
+curl: (28) Connection timed out after 3001 milliseconds
 
 
 
