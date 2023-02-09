@@ -90,12 +90,28 @@ ovn-nbctl add Load_Balancer_Group $group_uuid load_balancer $uuid
 curl: (28) Connection timed out after 3001 milliseconds
 
 
+[root@ovn-control-plane ~]# ovn-sbctl list Controller_Event
+_uuid               : 8bf8e847-24eb-4651-90a0-be26d044526e
+chassis             : 57e8bff2-fcca-4054-a26d-081329682a7e
+event_info          : {load_balancer="4319fa4a-f667-4034-b4bb-abc030459a2a", protocol=tcp, vip="10.96.137.236:8000"}
+event_type          : empty_lb_backends
+seq_num             : 6
 
-ovn-nbctl set Load_Balancer $uuid options:event=false
+
+# ---------------------------------------------------------
+
+ovn-sbctl --all destroy Controller_Event
+ovn-nbctl --if-exists destroy Load_Balancer $uuid
+uuid=`ovn-nbctl create Load_Balancer name=lb0`
+
+ovn-nbctl add Load_Balancer $uuid vips "\"10.96.137.236:8000\"=\"\""
+ovn-nbctl add Load_Balancer $uuid options event=true reject=true
+ovn-nbctl add Load_Balancer $uuid protocol tcp
+group_uuid=`ovn-nbctl --columns=_uuid find Load_Balancer_Group name=clusterLBGroup | sed "s/.*: //"`
+ovn-nbctl add Load_Balancer_Group $group_uuid load_balancer $uuid
 
 
-ovn-sbctl destroy Controller_Event ` ovn-sbctl list Controller_Event | grep _uuid | sed "s/.*: //"`
-
+#######################################################################################################
 
 switch_uuid=`ovn-nbctl --columns=_uuid find Logical_Switch name=ovn-control-plane | sed "s/.*: //"`
 group_uuid=`ovn-nbctl --columns=_uuid find Load_Balancer_Group name=clusterLBGroup | sed "s/.*: //"`
@@ -104,3 +120,27 @@ ovn-nbctl add Logical_Switch $switch_uuid load_balancer $uuid
 ovn-nbctl find Load_Balancer name=lb0
 ovn-sbctl lflow-list
 ovn-sbctl list Controller_Event
+
+
+ovn-nbctl  set NB_Global e61500dc-4f17-4af5-b349-eb7d9cc8c4c3  options:controller_event=false
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[root@ovn-control-plane ~]# ovn-sbctl lflow-list | grep 137.236 | grep trigger
+  table=7 (lr_in_dnat         ), priority=130  , match=(ip4.dst == 10.96.137.236 && tcp && tcp.dst == 8000), action=(trigger_event(event = "empty_lb_backends", vip = "10.96.137.236:8000", protocol = "tcp", load_balancer = "2eb2ad99-c3b9-4c9a-9bd4-fd6a02783b85");)
+  table=7 (lr_in_dnat         ), priority=130  , match=(ip4.dst == 10.96.137.236 && tcp && tcp.dst == 8000), action=(trigger_event(event = "empty_lb_backends", vip = "10.96.137.236:8000", protocol = "tcp", load_balancer = "2eb2ad99-c3b9-4c9a-9bd4-fd6a02783b85");)
+  table=7 (lr_in_dnat         ), priority=130  , match=(ip4.dst == 10.96.137.236 && tcp && tcp.dst == 8000), action=(trigger_event(event = "empty_lb_backends", vip = "10.96.137.236:8000", protocol = "tcp", load_balancer = "2eb2ad99-c3b9-4c9a-9bd4-fd6a02783b85");)
+  table=5 (ls_in_pre_lb       ), priority=130  , match=(ip4.dst == 10.96.137.236 && tcp && tcp.dst == 8000), action=(trigger_event(event = "empty_lb_backends", vip = "10.96.137.236:8000", protocol = "tcp", load_balancer = "2eb2ad99-c3b9-4c9a-9bd4-fd6a02783b85");)
+  table=5 (ls_in_pre_lb       ), priority=130  , match=(ip4.dst == 10.96.137.236 && tcp && tcp.dst == 8000), action=(trigger_event(event = "empty_lb_backends", vip = "10.96.137.236:8000", protocol = "tcp", load_balancer = "2eb2ad99-c3b9-4c9a-9bd4-fd6a02783b85");)
+  table=5 (ls_in_pre_lb       ), priority=130  , match=(ip4.dst == 10.96.137.236 && tcp && tcp.dst == 8000), action=(trigger_event(event = "empty_lb_backends", vip = "10.96.137.236:8000", protocol = "tcp", load_balancer = "2eb2ad99-c3b9-4c9a-9bd4-fd6a02783b85");)
